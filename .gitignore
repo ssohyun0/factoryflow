@@ -1,0 +1,29 @@
+# macOS
+.DS_Store
+
+# 에디터/에이전트 도구 (과제 결과물 아님)
+.agents/
+.claude/
+skills-lock.json
+
+# 비밀값
+.env
+*.env.local
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
+
+# 문서 작업 임시 파일
+~$*.docx
+
+# 마크다운 문서는 로컬에만 둔다 (README.md만 저장소에 올림)
+*.md
+!README.md
+
+# 개발 문서·도구는 로컬에만 둔다 (저장소에는 개발 코드와 README.md만 올림)
+docs/
+scripts/
+tasks/
