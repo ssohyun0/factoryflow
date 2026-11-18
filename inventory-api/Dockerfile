@@ -30,4 +30,7 @@ COPY conf/php-factoryflow.ini /usr/local/etc/php/conf.d/factoryflow.ini
 COPY public/ /var/www/html/
 COPY src/    /var/www/src/
 
+# 단위 테스트 (docker exec erp-inventory-api php /var/www/tests/run.php 로 실행)
+COPY tests/  /var/www/tests/
+
 EXPOSE 80

@@ -25,6 +25,8 @@ require $src . '/Session.php';
 require $src . '/AuthController.php';
 require $src . '/StockService.php';
 require $src . '/InventoryController.php';
+require $src . '/BomService.php';
+require $src . '/InternalController.php';
 
 /**
  * 라우트 표: [메서드, 경로] => [클래스, 정적 메서드]
@@ -39,6 +41,10 @@ $routes = [
     'GET /api/inventory/models'        => [InventoryController::class, 'models'],
     'GET /api/inventory/transactions'  => [InventoryController::class, 'transactions'],
     'POST /api/inventory/receipts'     => [InventoryController::class, 'receipt'],
+    // 내부 API (생산 서버 전용, X-Internal-Token 필요)
+    'POST /internal/stock/check'       => [InternalController::class, 'check'],
+    'POST /internal/stock/produce'     => [InternalController::class, 'produce'],
+    'POST /internal/stock/ship'        => [InternalController::class, 'ship'],
 ];
 
 $method = $_SERVER['REQUEST_METHOD'];

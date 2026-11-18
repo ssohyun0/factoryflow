@@ -78,6 +78,12 @@ final class RedisSessionHandler implements SessionHandlerInterface, SessionUpdat
      */
     public function write(string $id, string $data): bool
     {
+        // 빈 세션(로그인 정보가 없는 세션)은 저장하지 않는다.
+        // 로그아웃 후 남은 쿠키로 요청이 오면 PHP 가 새 빈 세션을 만드는데, 이를 Redis 에 쌓지 않기 위함이다.
+        if ($data === '') {
+            $this->redis->del($this->key($id));
+            return true;
+        }
         return (bool) $this->redis->setex($this->key($id), SESSION_TTL, $data);
     }
 
