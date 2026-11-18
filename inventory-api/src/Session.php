@@ -42,6 +42,11 @@ final class Session
      */
     public static function user(): ?array
     {
+        // 세션 쿠키가 아예 없으면 로그인하지 않은 것이 확실하다.
+        // 이때 session_start() 를 하면 빈 세션이 Redis 에 쌓이므로 시작하지 않는다.
+        if (!self::$started && empty($_COOKIE[SESSION_NAME])) {
+            return null;
+        }
         self::start();
         if (empty($_SESSION['userId'])) {
             return null;
@@ -99,6 +104,9 @@ final class Session
      */
     public static function logout(): void
     {
+        if (empty($_COOKIE[SESSION_NAME])) {
+            return;                          // 세션 쿠키가 없으면 지울 세션도 없다
+        }
         self::start();
         $_SESSION = [];
         $params = session_get_cookie_params();

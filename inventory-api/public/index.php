@@ -23,15 +23,22 @@ require $src . '/Db.php';
 require $src . '/RedisSessionHandler.php';
 require $src . '/Session.php';
 require $src . '/AuthController.php';
+require $src . '/StockService.php';
+require $src . '/InventoryController.php';
 
 /**
  * 라우트 표: [메서드, 경로] => [클래스, 정적 메서드]
- * 이후 작업(T5, T6)에서 재고 조회·입고·내부 API 를 여기에 추가한다.
  */
 $routes = [
-    'POST /api/auth/login'        => [AuthController::class, 'login'],
-    'POST /api/auth/logout'       => [AuthController::class, 'logout'],
-    'GET /api/inventory/session'  => [AuthController::class, 'session'],
+    // 인증·세션
+    'POST /api/auth/login'             => [AuthController::class, 'login'],
+    'POST /api/auth/logout'            => [AuthController::class, 'logout'],
+    'GET /api/inventory/session'       => [AuthController::class, 'session'],
+    // 재고 조회·입고 (화면용)
+    'GET /api/inventory/items'         => [InventoryController::class, 'items'],
+    'GET /api/inventory/models'        => [InventoryController::class, 'models'],
+    'GET /api/inventory/transactions'  => [InventoryController::class, 'transactions'],
+    'POST /api/inventory/receipts'     => [InventoryController::class, 'receipt'],
 ];
 
 $method = $_SERVER['REQUEST_METHOD'];

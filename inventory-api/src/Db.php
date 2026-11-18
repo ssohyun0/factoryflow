@@ -69,6 +69,29 @@ final class Db
     }
 
     /**
+     * 함수 안의 모든 SQL 을 하나의 트랜잭션으로 실행한다.
+     * 함수가 예외를 던지면 전부 되돌리고(ROLLBACK) 예외를 다시 던진다.
+     * 재고 변경(입고·생산 반영·출하)은 반드시 이 안에서 처리해 "재고만 바뀌고 이력은 없는" 상태를 막는다.
+     *
+     * @template T
+     * @param callable():T $work
+     * @return T 함수의 반환값
+     */
+    public static function transaction(callable $work): mixed
+    {
+        $pdo = self::pdo();
+        $pdo->beginTransaction();
+        try {
+            $result = $work();
+            $pdo->commit();
+            return $result;
+        } catch (Throwable $e) {
+            $pdo->rollBack();
+            throw $e;
+        }
+    }
+
+    /**
      * INSERT / UPDATE / DELETE 를 실행하고 바뀐 행 수를 돌려준다.
      *
      * @param string $sql
