@@ -1,0 +1,29 @@
+<!doctype html>
+<!-- ------------------------------------------------------------
+  index.html — FactoryFlow 화면의 유일한 HTML (단일 페이지)
+  역할 : 빈 틀(#app, #layer, #toasts)만 두고, 실제 화면은 js/app.js 가 그린다.
+         화면 이동은 주소 뒤의 #해시(#dashboard, #work ...)로 한다.
+  제공 : erp-frontend(Nginx) 컨테이너. 브라우저는 erp-proxy(http://factoryflow.test)를 거쳐 받는다.
+  스크립트 순서 : jQuery → api.js(서버 호출) → app.js(화면)
+------------------------------------------------------------- -->
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>FactoryFlow · 북극 트리 공장 ERP</title>
+  <!-- 글꼴: 인터넷이 없으면 시스템 글꼴(Apple SD Gothic Neo 등)로 대신 표시된다 -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+  <link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+  <div id="app"></div>                                    <!-- 로그인 화면 또는 메뉴 + 작업 영역 -->
+  <div id="layer"></div>                                  <!-- 팝업(모달)과 세션 확인 패널 -->
+  <div class="toasts" id="toasts" aria-live="polite"></div> <!-- 알림 메시지 -->
+
+  <!-- jQuery는 CDN 대신 이미지에 포함한다 (시연 중 인터넷이 끊겨도 동작) -->
+  <script src="js/vendor/jquery-3.7.1.min.js"></script>
+  <script src="js/api.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
