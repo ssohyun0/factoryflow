@@ -36,8 +36,9 @@ def connect() -> pymysql.connections.Connection:
             autocommit=False,
             connect_timeout=3,
         )
-    except pymysql.MySQLError as e:
-        print(f"[DB] 접속 실패: {e}")
+    except (pymysql.MySQLError, RuntimeError) as e:
+        # RuntimeError: 로그인 방식에 필요한 패키지(cryptography)가 없을 때 PyMySQL 이 내는 오류
+        print(f"[DB] 접속 실패: {e!r}")
         raise ApiError(503, "DB_UNAVAILABLE", "데이터베이스에 접속할 수 없습니다.") from e
 
 

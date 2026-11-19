@@ -3,6 +3,7 @@
 #   fastapi  : API 프레임워크
 #   uvicorn  : ASGI 서버 (컨테이너 실행 명령)
 #   PyMySQL  : erp_production 스키마 접속 (작업지시·출하 저장, T9부터 사용)
+#   cryptography : PyMySQL 이 MySQL 8 기본 로그인 방식(caching_sha2_password)을 쓰는 데 필요
 #   redis    : 공유 세션 조회 (PHP가 만든 session:<ID> 키를 읽음)
 #   httpx    : 재고 서버 내부 API 호출 (T9부터 사용), FastAPI TestClient도 사용
 #   pytest   : 단위 테스트 (컨테이너 안에서 pytest -q)
@@ -10,6 +11,7 @@
 fastapi==0.115.6
 uvicorn==0.32.1
 PyMySQL==1.1.1
+cryptography==44.0.0
 redis==5.2.1
 httpx==0.28.1
 pytest==8.3.4
