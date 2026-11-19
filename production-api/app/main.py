@@ -7,7 +7,8 @@
 #   GET /api/production/session   세션 정보 + servedBy(응답한 컨테이너 hostname)
 #                                 → PHP 의 /api/inventory/session 과 sessionId·사용자가 같으면 세션 공유,
 #                                   여러 번 호출해 servedBy 가 3종 나오면 분산이 증명된다.
-#   (작업지시·생산계획·출하 API 는 T9, T10 에서 추가)
+#   /api/production/work-orders, /plans/check ...  생산계획·작업지시 (app/routers/work_orders.py)
+#   (완료·출하 API 는 T10 에서 추가)
 # ------------------------------------------------------------
 import platform
 
@@ -17,10 +18,12 @@ from fastapi.exceptions import RequestValidationError
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app.responses import ApiError, fail, ok
+from app.routers import work_orders
 from app.session import SessionUser, get_current_user
 
 # docs_url 등을 끈다: 외부에 API 문서를 노출하지 않는다
 app = FastAPI(title="FactoryFlow 생산 서비스", docs_url=None, redoc_url=None, openapi_url=None)
+app.include_router(work_orders.router)
 
 
 @app.exception_handler(ApiError)

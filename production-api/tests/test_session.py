@@ -1,67 +1,25 @@
 # ------------------------------------------------------------
 # tests/test_session.py
 # 역할 : 공유 세션 조회(app/session.py)와 GET /api/production/session 단위 테스트.
-#        실제 Redis 대신 메모리 가짜 저장소(FakeRedis)를 쓴다.
+#        실제 Redis 대신 메모리 가짜 저장소(tests/conftest.py 의 FakeRedis)를 쓴다.
 # 실행 : docker exec erp-production-api-1 pytest -q
 # 검사 : PHP 직렬화 해석(한글 바이트 길이 포함), 쿠키 없음 401, 만료·로그아웃 401,
 #        빈 세션 401, 정상 세션 200 + TTL 연장, 역할 검사 403
 # ------------------------------------------------------------
 import pytest
 from fastapi import Depends
-from fastapi.testclient import TestClient
 
 from app.config import SESSION_NAME, SESSION_TTL
 from app.main import app
 from app.responses import ok
-from app.session import (
-    PhpSessionDecodeError,
-    SessionUser,
-    decode_php_session,
-    get_redis,
-    require_role,
-)
-
-# PHP 가 santa 로그인 후 Redis 에 저장하는 값과 같은 형식 ("산타" = UTF-8 6바이트)
-SANTA_RAW = (
-    'userId|i:1;username|s:5:"santa";displayName|s:6:"산타";'
-    'role|s:5:"ADMIN";loginAt|s:19:"2026-11-19 10:00:00";'
-).encode("utf-8")
-SID = "abc123def456"
-
-
-class FakeRedis:
-    """테스트용 메모리 Redis. get / expire 만 흉내 내고, expire 호출을 기록한다."""
-
-    def __init__(self):
-        self.data: dict[str, bytes] = {}
-        self.ttl: dict[str, int] = {}
-
-    def get(self, key):
-        return self.data.get(key)
-
-    def expire(self, key, seconds):
-        self.ttl[key] = seconds
-        return key in self.data
+from app.session import PhpSessionDecodeError, SessionUser, decode_php_session, require_role
+from tests.conftest import SANTA_RAW, SID
 
 
 # 테스트 전용 경로: ADMIN 만 허용 (require_role 검사용)
 @app.get("/api/production/_test/admin-only")
 def _admin_only(user: SessionUser = Depends(require_role("ADMIN"))):
     return ok({"username": user.username})
-
-
-@pytest.fixture
-def store():
-    """가짜 저장소를 앱에 주입하고, 테스트가 끝나면 원래대로 돌린다."""
-    fake = FakeRedis()
-    app.dependency_overrides[get_redis] = lambda: fake
-    yield fake
-    app.dependency_overrides.clear()
-
-
-@pytest.fixture
-def client():
-    return TestClient(app)
 
 
 # ---------- PHP 직렬화 해석 ----------
