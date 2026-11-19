@@ -219,7 +219,3 @@ select { padding: 6px 10px; border: 1px solid var(--line); border-radius: 6px; b
   .top, .view { padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
 }
 
-/* 세션 확인 패널: 서버별 값 비교 줄 */
-.svc .v.same { color: var(--ok); }
-.svc .v.diff { color: var(--crit); }
-.verdict.crit { background: var(--crit-bg); color: var(--crit); }

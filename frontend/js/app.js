@@ -1,6 +1,6 @@
 /* ------------------------------------------------------------
- * js/app.js — FactoryFlow 화면 (로그인, 메뉴, 세션 확인 패널)
- * 역할 : 시안(docs/mockup)의 화면 구조를 그대로 옮기고, 데이터는 서버 API(api.js)에서 받는다.
+ * js/app.js — FactoryFlow 화면 (로그인, 메뉴, 화면 이동)
+ * 역할 : 시안(docs/mockup)의 화면 구조를 옮기고, 데이터는 서버 API(api.js)에서 받는다.
  *        화면이 기억하는 값은 로그인 사용자 정보뿐이다. 재고·작업지시 등은 매번 서버에 묻는다.
  * 화면 이동 : 주소의 #해시 (#dashboard, #models, #plan, #work, #inventory)
  * 역할별 메뉴 : 산타(ADMIN) 대시보드·트리 모델·재고 / 루돌프(WORKER) 대시보드·작업·재고
@@ -55,8 +55,7 @@ const ICON = {
 const TREE_LOGO = '<svg width="30" height="30" viewBox="0 0 30 30" aria-hidden="true"><path d="M15 3 7 14h4l-5 7h18l-5-7h4z" fill="var(--pine)"/><rect x="13" y="21" width="4" height="5" fill="var(--gold)"/><circle cx="12" cy="17" r="1.6" fill="var(--berry)"/><circle cx="18" cy="12" r="1.6" fill="var(--berry)"/></svg>';
 
 /** 아직 연결하지 않은 업무 화면의 임시 내용 (T11, T12 에서 교체) */
-const pending = task => () => `<div class="panel"><div class="panel-body empty">이 화면은 ${task}에서 서버 API와 연결합니다.<br>
-  상단의 [세션 확인]으로 세션 공유와 생산 서버 분산을 확인할 수 있습니다.</div></div>`;
+const pending = task => () => `<div class="panel"><div class="panel-body empty">이 화면은 ${task}에서 서버 API와 연결합니다.</div></div>`;
 
 // ---- 라우팅: 역할별 탭 --------------------------------------------------
 // render 는 HTML 문자열을 돌려주는 함수. nav=false 인 화면(생산계획)은 메뉴에 없고 단계 이동으로만 들어간다
@@ -87,13 +86,11 @@ function render() {
       <nav class="nav" aria-label="주 메뉴">
         ${tabs.map(([k, v]) => `<a href="#${k}" ${k === r || (r === 'plan' && k === 'models') ? 'aria-current="page"' : ''}>${ICON[k]}${v.title.replace(' (BOM)', '')}</a>`).join('')}
       </nav>
-      <div class="side-foot">factoryflow.test<br><span class="mono">erp-proxy → erp-net</span></div>
     </aside>
     <div class="main">
       <header class="top">
         <div><h1>${R.title}</h1><div class="sub">${R.sub}</div></div>
         <div class="top-actions">
-          <button class="btn" data-action="open-session">세션 확인</button>
           <span class="user-chip"><span class="avatar ${isAdmin() ? '' : 'worker'}">${esc(u.username[0].toUpperCase())}</span>${esc(u.username)} · ${esc(u.displayName)} · ${ROLE_LABEL[u.role] || esc(u.role)}</span>
           <button class="btn" data-action="logout">로그아웃</button>
         </div>
@@ -118,7 +115,6 @@ function loginView() {
         <button type="button" class="btn small" data-action="fill" data-id="santa">santa · 산타</button>
         <button type="button" class="btn small" data-action="fill" data-id="reindeer">reindeer · 루돌프</button>
       </div>
-      <p class="hint" style="margin:0">POST /api/auth/login → erp-inventory-api (PHP)<br>성공 시 쿠키 FFSESSID 발급, 세션은 erp-redis(session:&lt;ID&gt;)에 저장</p>
     </form>
   </div>`;
 }
@@ -132,11 +128,11 @@ async function submitLogin() {
   const btn = $q('#login-btn');
   btn.disabled = true;
   try {
-    const { data, servedBy } = await Api.login(username, password);
+    const { data } = await Api.login(username, password);
     state.user = data;
     location.hash = 'dashboard';
     render();
-    toast(`${data.displayName}님 로그인 · Set-Cookie FFSESSID`, { meta: `${servedBy} → erp-redis SET session:${data.sessionId.slice(0, 8)}…` });
+    toast(`${data.displayName}님, 환영합니다.`);
   } catch (err) {
     $q('#login-err').textContent = err.message;
     btn.disabled = false;
@@ -147,75 +143,13 @@ async function submitLogin() {
 async function logout() {
   try {
     await Api.logout();
-    toast('로그아웃했습니다. Redis 세션이 삭제되었습니다.');
+    toast('로그아웃했습니다.');
   } catch (err) {
     toast(err.message, { crit: true });
   }
   state.user = null;
   closeLayer();
   render();
-}
-
-// ---- 세션 확인 패널: 세션 공유 + 생산 서버 분산 증명 ---------------------
-/**
- * 패널을 열고 PHP·FastAPI 양쪽 세션 정보를 동시에 불러와 비교한다.
- * 두 서버의 sessionId·username 이 같으면 이기종 세션 공유가 동작하는 것이다.
- */
-async function openSession() {
-  $q('#layer').innerHTML = `<div class="overlay" data-action="close-layer" style="place-items:stretch end;padding:0"><aside class="drawer" aria-label="세션 공유 확인">
-    <div class="panel-head"><h2>세션 공유 확인</h2><button class="btn small" data-action="close-layer">닫기</button></div>
-    <div class="panel-body">
-      <div class="svc"><span class="k">GET /api/inventory/session → erp-inventory-api (PHP)</span><span class="v" id="svc-php">불러오는 중…</span></div>
-      <div class="svc"><span class="k">GET /api/production/session → production_pool (FastAPI)</span><span class="v" id="svc-py">불러오는 중…</span></div>
-      <div id="share-verdict"></div>
-      <p class="hint" style="margin:0">두 서버가 같은 쿠키 FFSESSID로 erp-redis의 같은 키 session:&lt;ID&gt;를 읽습니다.</p>
-      <button class="btn primary" data-action="burst" style="align-self:flex-start">생산 서버 6회 연속 호출</button>
-      <div class="table-wrap"><table>
-        <thead><tr><th>#</th><th>servedBy</th><th>sessionId</th><th>user</th></tr></thead>
-        <tbody id="burst-body"><tr><td colspan="4" class="hint">버튼을 누르면 erp-proxy가 요청을 3대에 차례로 나눕니다.</td></tr></tbody></table></div>
-      <div id="burst-verdict"></div>
-    </div></aside></div>`;
-
-  // 두 요청을 동시에 보낸다. 한쪽이 실패해도 다른 쪽 결과는 보여준다
-  const [php, py] = await Promise.allSettled([Api.inventorySession(), Api.productionSession()]);
-  const line = r => r.status === 'fulfilled'
-    ? `sessionId ${esc(r.value.data.sessionId)}<br>user ${esc(r.value.data.username)} · ${esc(r.value.data.role)} · ${esc(r.value.data.server)}<br>servedBy <span class="server">${esc(r.value.servedBy)}</span>`
-    : `<span class="minus">${esc(r.reason.status)} ${esc(r.reason.message)}</span>`;
-  if (!$q('#svc-php')) return;   // 그사이 패널을 닫았으면 그리지 않는다
-  $q('#svc-php').innerHTML = line(php);
-  $q('#svc-py').innerHTML = line(py);
-  if (php.status === 'fulfilled' && py.status === 'fulfilled') {
-    const same = php.value.data.sessionId === py.value.data.sessionId && php.value.data.username === py.value.data.username;
-    $q('#share-verdict').innerHTML = same
-      ? '<div class="verdict">PHP와 FastAPI가 같은 세션을 읽었습니다 (세션 공유 성공)</div>'
-      : '<div class="verdict crit">두 서버의 세션이 다릅니다</div>';
-  }
-}
-
-/**
- * 생산 서버 세션 API 를 6번 차례로 호출해 응답한 컨테이너(servedBy)를 표에 쌓는다.
- * erp-proxy 의 라운드로빈 때문에 erp-production-api-1 → 2 → 3 → 1 … 순서로 응답한다.
- */
-async function burst() {
-  const tb = $q('#burst-body'), btn = $q('[data-action="burst"]');
-  tb.innerHTML = ''; $q('#burst-verdict').innerHTML = '';
-  btn.disabled = true;
-  const servers = new Set();
-  let sameCount = 0;
-  for (let i = 1; i <= 6; i++) {
-    try {
-      const { data, servedBy } = await Api.productionSession();
-      servers.add(servedBy);
-      if (data.sessionId === state.user.sessionId) sameCount++;
-      tb.insertAdjacentHTML('beforeend', `<tr><td class="num">${i}</td><td class="server">${esc(servedBy)}</td><td class="mono">${esc(data.sessionId.slice(0, 12))}…</td><td>${esc(data.username)}</td></tr>`);
-    } catch (err) {
-      tb.insertAdjacentHTML('beforeend', `<tr><td class="num">${i}</td><td colspan="3" class="minus">${esc(err.status)} ${esc(err.message)}</td></tr>`);
-      if (err.status === 401) break;   // 로그아웃·만료면 더 부를 필요가 없다 (로그인 화면으로 이동됨)
-    }
-  }
-  btn.disabled = false;
-  const ok = servers.size >= 2 && sameCount === 6;
-  $q('#burst-verdict').innerHTML = `<div class="verdict ${ok ? '' : 'crit'}">서버 ${servers.size}대로 분산 · 세션 ${sameCount}/6 동일</div>`;
 }
 
 // ---- 이벤트 연결 (data-action 속성으로 구분) ------------------------------
@@ -225,10 +159,8 @@ document.addEventListener('click', e => {
   switch (el.dataset.action) {
     case 'fill': $q('#login-id').value = el.dataset.id; $q('#login-pw').value = el.dataset.id + '123'; break;   // 시연용 계정 채우기
     case 'logout': logout(); break;
-    case 'open-session': openSession(); break;
-    case 'burst': burst(); break;
     case 'close-layer':
-      // 바깥 어두운 영역 또는 [닫기] 버튼을 눌렀을 때만 닫는다 (패널 안쪽 클릭은 무시)
+      // 팝업 바깥 어두운 영역 또는 [닫기] 버튼을 눌렀을 때만 닫는다 (팝업 안쪽 클릭은 무시)
       if (e.target === el || el.tagName === 'BUTTON') closeLayer();
       break;
   }
