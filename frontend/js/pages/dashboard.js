@@ -3,6 +3,7 @@
  * 역할 : 오늘 작업 현황을 한 화면에 보여준다. 모든 숫자는 Store.load() 의 서버 값에서 계산한다.
  *   - 상단 안내 + 산타 전용 [BOM 입력하기]
  *   - KPI 4개: 오늘 생산 완료, 남은 작업지시, 안전재고 미달 자재, 출하 대기 완성 트리
+ *   - 현재 작업지시(위) → 자재 현황(아래): 화면 너비와 관계없이 위아래로 쌓는다
  *   - 현재 작업지시: 모델별 요약 한 줄 + 목록(번호, 트리, 수량, 상태, 처리 서버)
  *                   산타 [수량 수정] / 루돌프 [작업하러 가기]
  *   - 자재 현황: 재고 / 안전재고, 대기 지시(예약량), 상태 / 완성 트리 재고 / 산타 [자재 입고]
@@ -36,23 +37,21 @@ Pages.dashboard = {
       <div class="kpi ${low.length ? 'alert' : ''}"><span class="label">안전재고 미달 자재</span><span class="value">${low.length}<small>종</small></span></div>
       <div class="kpi"><span class="label">출하 대기 완성 트리</span><span class="value">${fmt(treeSum)}<small>그루</small></span></div>
     </div>
-    <div class="two-col">
-      ${workOrderPanel(d)}
-      <div class="panel">
-        <div class="panel-head"><h2>자재 현황</h2>
-          ${isAdmin() ? '<button class="btn small primary" data-action="receive">자재 입고</button>' : ''}</div>
-        <div class="mat-list">
-          <div class="mat-row mat-head"><span>자재</span><span></span><span>재고 / 안전재고</span><span class="rsv">대기 지시</span><span></span></div>
-          ${mats.map(i => {
-            const r = i.safetyStock ? i.stock / i.safetyStock : 1, rsv = d.reserved(i.code);
-            return `<div class="mat-row"><span>${esc(i.name)}</span>
-              <div class="bar"><i class="${r < 0.5 ? 'crit' : r < 1 ? '' : 'ok'}" style="width:${Math.min(100, Math.round(r * 100))}%"></i></div>
-              <span class="num">${fmt(i.stock)} / ${fmt(i.safetyStock)}</span>
-              <span class="rsv num ${rsv ? 'minus' : 'hint'}" title="대기 중인 작업지시가 쓸 수량">${rsv ? '−' + fmt(rsv) : '-'}</span>${stockPill(i.stock, i.safetyStock)}</div>`;
-          }).join('')}
-        </div>
-        <div class="tree-stock"><span class="hint">완성 트리</span>${d.trees.map(t => `<span>${esc(d.shortName(t.code))} <strong class="num">${fmt(t.stock)}</strong></span>`).join('')}</div>
+    ${workOrderPanel(d)}
+    <div class="panel">
+      <div class="panel-head"><h2>자재 현황</h2>
+        ${isAdmin() ? '<button class="btn small primary" data-action="receive">자재 입고</button>' : ''}</div>
+      <div class="mat-list">
+        <div class="mat-row mat-head"><span>자재</span><span></span><span>재고 / 안전재고</span><span class="rsv">대기 지시</span><span></span></div>
+        ${mats.map(i => {
+          const r = i.safetyStock ? i.stock / i.safetyStock : 1, rsv = d.reserved(i.code);
+          return `<div class="mat-row"><span>${esc(i.name)}</span>
+            <div class="bar"><i class="${r < 0.5 ? 'crit' : r < 1 ? '' : 'ok'}" style="width:${Math.min(100, Math.round(r * 100))}%"></i></div>
+            <span class="num">${fmt(i.stock)} / ${fmt(i.safetyStock)}</span>
+            <span class="rsv num ${rsv ? 'minus' : 'hint'}" title="대기 중인 작업지시가 쓸 수량">${rsv ? '−' + fmt(rsv) : '-'}</span>${stockPill(i.stock, i.safetyStock)}</div>`;
+        }).join('')}
       </div>
+      <div class="tree-stock"><span class="hint">완성 트리</span>${d.trees.map(t => `<span>${esc(d.shortName(t.code))} <strong class="num">${fmt(t.stock)}</strong></span>`).join('')}</div>
     </div>`;
   },
 };
