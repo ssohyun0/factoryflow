@@ -4,45 +4,12 @@
  *        화면이 기억하는 값은 로그인 사용자 정보뿐이다. 재고·작업지시 등은 매번 서버에 묻는다.
  * 화면 이동 : 주소의 #해시 (#dashboard, #models, #plan, #work, #inventory)
  * 역할별 메뉴 : 산타(ADMIN) 대시보드·트리 모델·재고 / 루돌프(WORKER) 대시보드·작업·재고
- * 업무 화면 : T11(산타 화면), T12(루돌프·재고 화면)에서 js/pages/*.js 로 채운다.
- * 의존 : jQuery, js/api.js
+ * 업무 화면 : js/pages/*.js 가 Pages(화면), Actions(버튼), Forms(폼 제출), Changes(입력 변경)에
+ *            자기 함수를 등록하고, 이 파일이 화면 이동과 이벤트를 연결한다.
+ * 화면 그리기 : 화면을 바꿀 때마다 Store.load() 로 서버 데이터를 새로 받아 그린다 (숫자를 기억하지 않음).
+ * 의존 : jQuery, js/core.js, js/api.js, js/store.js, js/pages/*.js (이 파일을 맨 마지막에 불러온다)
  * ------------------------------------------------------------ */
 'use strict';
-
-// ---- 상태: 로그인 사용자만 기억한다 -----------------------------------
-const state = {
-  user: null,   // { userId, username, displayName, role, loginAt, sessionId }
-};
-
-// ---- 공통 도구 ---------------------------------------------------------
-const $q = (s, el = document) => el.querySelector(s);
-const isAdmin = () => state.user && state.user.role === 'ADMIN';
-const ROLE_LABEL = { ADMIN: '생산관리자', WORKER: '현장 작업자' };
-
-/**
- * 서버에서 받은 글자를 HTML 에 넣기 전에 특수문자를 바꾼다 (XSS 방지).
- * @param {any} v 출력할 값
- * @returns {string}
- */
-function esc(v) {
-  return String(v ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-}
-
-/**
- * 화면 오른쪽 아래에 알림을 잠깐 보여준다. 최근 3개만 남긴다.
- * @param {string} msg 본문
- * @param {{crit?:boolean, meta?:string}} opt crit=오류 색, meta=처리 서버 등 보조 정보
- */
-function toast(msg, opt = {}) {
-  const el = document.createElement('div');
-  el.className = 'toast' + (opt.crit ? ' crit' : '');
-  el.innerHTML = `<div>${esc(msg)}</div>${opt.meta ? `<div class="meta">${esc(opt.meta)}</div>` : ''}`;
-  const box = $q('#toasts');
-  box.appendChild(el);
-  while (box.children.length > 3) box.firstElementChild.remove();
-  setTimeout(() => el.remove(), 4500);
-}
-const closeLayer = () => { $q('#layer').innerHTML = ''; };
 
 // ---- 아이콘 (시안과 동일) ------------------------------------------------
 const ICON = {
@@ -54,18 +21,18 @@ const ICON = {
 };
 const TREE_LOGO = '<svg width="30" height="30" viewBox="0 0 30 30" aria-hidden="true"><path d="M15 3 7 14h4l-5 7h18l-5-7h4z" fill="var(--pine)"/><rect x="13" y="21" width="4" height="5" fill="var(--gold)"/><circle cx="12" cy="17" r="1.6" fill="var(--berry)"/><circle cx="18" cy="12" r="1.6" fill="var(--berry)"/></svg>';
 
-/** 아직 연결하지 않은 업무 화면의 임시 내용 (T11, T12 에서 교체) */
-const pending = task => () => `<div class="panel"><div class="panel-body empty">이 화면은 ${task}에서 서버 API와 연결합니다.</div></div>`;
-
 // ---- 라우팅: 역할별 탭 --------------------------------------------------
-// render 는 HTML 문자열을 돌려주는 함수. nav=false 인 화면(생산계획)은 메뉴에 없고 단계 이동으로만 들어간다
+// nav=false 인 화면(생산계획)은 메뉴에 없고 트리 모델 탭의 [최종 결정]으로만 들어간다
 const ROUTES = {
-  dashboard: { title: '대시보드',        sub: '오늘 작업지시와 자재 현황',                        render: pending('T11'), roles: ['ADMIN', 'WORKER'], nav: true },
-  models:    { title: '트리 모델 (BOM)', sub: '트리 모델을 고르고 몇 그루 만들지 정합니다',       render: pending('T11'), roles: ['ADMIN'],           nav: true },
-  plan:      { title: '생산계획',        sub: '최종 주문 내역을 확인하고 오늘 생산할 수량을 정합니다', render: pending('T11'), roles: ['ADMIN'],      nav: false },
-  work:      { title: '작업',            sub: '작업지시대로 트리를 조립하고 완료를 누릅니다',     render: pending('T12'), roles: ['WORKER'],          nav: true },
-  inventory: { title: '재고',            sub: '자재·완성 트리 재고와 수불 이력',                  render: pending('T12'), roles: ['ADMIN', 'WORKER'], nav: true },
+  dashboard: { title: '대시보드',        sub: '오늘 작업지시와 자재 현황',                        roles: ['ADMIN', 'WORKER'], nav: true },
+  models:    { title: '트리 모델 (BOM)', sub: '트리 모델을 고르고 몇 그루 만들지 정합니다',       roles: ['ADMIN'],           nav: true },
+  plan:      { title: '생산계획',        sub: '최종 주문 내역을 확인하고 오늘 생산할 수량을 정합니다', roles: ['ADMIN'],      nav: false },
+  work:      { title: '작업',            sub: '작업지시대로 트리를 조립하고 완료를 누릅니다',     roles: ['WORKER'],          nav: true },
+  inventory: { title: '재고',            sub: '자재·완성 트리 재고와 수불 이력',                  roles: ['ADMIN', 'WORKER'], nav: true },
 };
+
+/** 다른 화면으로 이동한다. 이미 그 화면이면 다시 그린다 (서버 데이터 새로 받음) */
+const go = name => { if (location.hash.slice(1) === name) render(); else location.hash = name; };
 
 /** 현재 #해시에 맞는 화면 이름. 없거나 권한이 없는 화면이면 대시보드 */
 function route() {
@@ -73,13 +40,40 @@ function route() {
   return ROUTES[h] && ROUTES[h].roles.includes(state.user.role) ? h : 'dashboard';
 }
 
-/** 화면 전체를 다시 그린다. 로그인 전이면 로그인 화면 */
-function render() {
+/** 마지막으로 요청한 그리기 번호. 응답이 늦게 온 옛 그리기가 새 화면을 덮어쓰지 않게 한다 */
+let renderSeq = 0;
+
+/**
+ * 화면 전체를 다시 그린다. 로그인 전이면 로그인 화면.
+ * 서버 데이터를 먼저 받은 뒤 한 번에 바꿔서 화면이 깜빡이지 않게 한다.
+ * @returns {Promise<void>}
+ */
+async function render() {
   const app = $q('#app');
+  const seq = ++renderSeq;
   if (!state.user) { app.innerHTML = loginView(); $q('#login-id')?.focus(); return; }
-  const r = route(), R = ROUTES[r], u = state.user;
+  const r = route(), page = Pages[r];
+  if (!app.querySelector('.shell')) app.innerHTML = shellView(r, '<div class="panel"><div class="panel-body empty">불러오는 중…</div></div>');
+  let body;
+  try {
+    body = page ? await page.render(await Store.load()) : '<div class="panel"><div class="panel-body empty">준비 중인 화면입니다.</div></div>';
+  } catch (err) {
+    if (err.status === 401) return;   // 로그인 화면으로 이동은 Api 의 401 처리기가 한다
+    body = `<div class="panel"><div class="panel-body empty minus">${esc(err.message)}<br><button class="btn small" data-action="reload" style="margin-top:10px">다시 시도</button></div></div>`;
+  }
+  if (seq !== renderSeq || !state.user) return;   // 그사이 다른 화면으로 이동했거나 로그아웃함
+  app.innerHTML = shellView(r, body);
+}
+
+/**
+ * 메뉴 + 상단 바 + 작업 영역 HTML.
+ * @param {string} r    현재 화면 이름
+ * @param {string} body 작업 영역에 넣을 HTML
+ */
+function shellView(r, body) {
+  const R = ROUTES[r], u = state.user;
   const tabs = Object.entries(ROUTES).filter(([, v]) => v.nav && v.roles.includes(u.role));
-  app.innerHTML = `
+  return `
   <div class="shell">
     <aside class="side">
       <div class="brand">${TREE_LOGO}<div>FactoryFlow<small>북극 트리 공장 ERP</small></div></div>
@@ -95,9 +89,19 @@ function render() {
           <button class="btn" data-action="logout">로그아웃</button>
         </div>
       </header>
-      <section class="view">${R.render()}</section>
+      <section class="view">${body}</section>
     </div>
   </div>`;
+}
+
+/**
+ * 입력칸 값을 바꾼 뒤 화면을 다시 그릴 때, 그 입력칸에 커서를 되돌려 놓는다.
+ * @param {string} id 다시 포커스할 요소 id
+ */
+async function renderKeepFocus(id) {
+  await render();
+  const el = document.getElementById(id);
+  if (el) { el.focus(); if (el.select) el.select(); }
 }
 
 // ---- 로그인 -------------------------------------------------------------
@@ -148,6 +152,7 @@ async function logout() {
     toast(err.message, { crit: true });
   }
   state.user = null;
+  Draft.reset();
   closeLayer();
   render();
 }
@@ -159,16 +164,26 @@ document.addEventListener('click', e => {
   switch (el.dataset.action) {
     case 'fill': $q('#login-id').value = el.dataset.id; $q('#login-pw').value = el.dataset.id + '123'; break;   // 시연용 계정 채우기
     case 'logout': logout(); break;
+    case 'reload': render(); break;
     case 'close-layer':
       // 팝업 바깥 어두운 영역 또는 [닫기] 버튼을 눌렀을 때만 닫는다 (팝업 안쪽 클릭은 무시)
       if (e.target === el || el.tagName === 'BUTTON') closeLayer();
       break;
+    default:
+      if (Actions[el.dataset.action]) Actions[el.dataset.action](el, e);   // 화면 파일이 등록한 동작
   }
 });
 
 document.addEventListener('submit', e => {
   e.preventDefault();
-  if (e.target.id === 'login-form') submitLogin();
+  const id = e.target.id;
+  if (id === 'login-form') submitLogin();
+  else if (Forms[id]) Forms[id](e.target);
+});
+
+document.addEventListener('change', e => {
+  const name = e.target.dataset && e.target.dataset.change;
+  if (name && Changes[name]) Changes[name](e.target);
 });
 
 document.addEventListener('keydown', e => { if (e.key === 'Escape') closeLayer(); });
@@ -178,6 +193,7 @@ window.addEventListener('hashchange', () => { if (state.user) render(); });
 Api.setUnauthorizedHandler(() => {
   if (!state.user) return;
   state.user = null;
+  Draft.reset();
   closeLayer();
   render();
   toast('세션이 만료되었습니다. 다시 로그인하세요.', { crit: true });

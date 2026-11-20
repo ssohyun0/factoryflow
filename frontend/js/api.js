@@ -83,11 +83,33 @@ const Api = (() => {
     login: (username, password) => request('POST', '/api/auth/login', { username, password }),
     /** 로그아웃. Redis 세션이 지워져 두 서버 모두 401 이 된다 */
     logout: () => request('POST', '/api/auth/logout'),
-    /** PHP 가 읽은 세션 정보 */
+    /** PHP 가 읽은 세션 정보 (새로고침 시 로그인 유지에 사용) */
     inventorySession: () => request('GET', '/api/inventory/session'),
+
+    // ---- 재고 서버 (erp-inventory-api, PHP) ----
+    /** 품목 15종(자재 12 + 트리 3)과 재고·안전재고 */
+    items: () => request('GET', '/api/inventory/items'),
+    /** 트리 모델 3종과 BOM (1그루당 소요량) */
+    models: () => request('GET', '/api/inventory/models'),
+    /** 수불 이력 (최근순) */
+    transactions: (limit = 50) => request('GET', `/api/inventory/transactions?limit=${limit}`),
+    /** 자재 입고 (산타 전용) */
+    receipt: (itemCode, qty, supplier) => request('POST', '/api/inventory/receipts', { itemCode, qty, supplier }),
 
     // ---- 생산 서버 (erp-production-api-1~3, FastAPI) ----
     /** FastAPI 가 같은 쿠키로 읽은 세션 정보. servedBy 로 어느 복제본이 응답했는지 알 수 있다 */
     productionSession: () => request('GET', '/api/production/session'),
+    /** 작업지시 목록 + 모델별 대기 수량(waitingByTree) + 오늘 계획 횟수 */
+    workOrders: () => request('GET', '/api/production/work-orders'),
+    /** 계획 확인: 대기 작업지시 + lines 를 합쳐 부족 자재를 돌려준다 (저장 안 함). lines=[{treeCode, qty}] */
+    checkPlan: lines => request('POST', '/api/production/plans/check', { lines }),
+    /** 생산계획 저장 + 작업지시 일괄 등록. lines=[{treeCode, orderQty, planQty}]. 부족하면 409 */
+    createBatch: lines => request('POST', '/api/production/work-orders/batch', { lines }),
+    /** 대기 작업지시 수량 수정 (0 = 삭제). 늘린 수량이 부족하면 409 */
+    updateWorkOrder: (id, qty) => request('PATCH', `/api/production/work-orders/${id}`, { qty }),
+    /** 작업지시 완료 (루돌프 전용, T12) */
+    completeWorkOrder: id => request('POST', `/api/production/work-orders/${id}/complete`),
+    /** 출하 작업서 (루돌프 전용, T12). rows=[{treeCode, destination, qty}] */
+    ship: rows => request('POST', '/api/production/shipments', { rows }),
   };
 })();
