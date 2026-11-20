@@ -169,6 +169,7 @@ def require_role(role: str):
     """
 
     def dependency(user: SessionUser = Depends(get_current_user)) -> SessionUser:
+        """로그인 사용자의 역할이 role 과 같은지 확인한다. 같으면 그 사용자를 돌려준다."""
         if user.role != role:
             raise ApiError(403, "FORBIDDEN", "이 기능을 사용할 권한이 없습니다.")
         return user

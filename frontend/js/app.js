@@ -105,6 +105,7 @@ async function renderKeepFocus(id) {
 }
 
 // ---- 로그인 -------------------------------------------------------------
+/** 로그인 화면 HTML. 시연용 계정 버튼을 누르면 아이디·비밀번호가 채워진다 */
 function loginView() {
   return `
   <div class="login-wrap">
