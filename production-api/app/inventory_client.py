@@ -3,8 +3,8 @@
 # 역할 : 재고 서버(erp-inventory-api, PHP)의 내부 API 를 호출한다. (마이크로서비스 간 통신)
 #        erp-net 안에서 컨테이너 이름으로 직접 호출하며, 프록시를 거치지 않는다.
 #          POST /internal/stock/check    계획 확인 (재고 변경 없음)
-#          POST /internal/stock/produce  작업지시 완료 (T10)
-#          POST /internal/stock/ship     출하 (T10)
+#          POST /internal/stock/produce  작업지시 완료
+#          POST /internal/stock/ship     출하
 #        인증은 세션 쿠키가 아니라 X-Internal-Token 헤더(서비스 간 공유 비밀값)로 한다.
 #
 # 오류 변환 : 재고 서버의 400·409 는 그대로 화면까지 전달한다 (부족 자재 목록 포함).
@@ -64,3 +64,24 @@ def check_stock(lines: list[dict]) -> dict:
     Returns: {"ok": bool, "need": {자재코드: 수량}, "shortages": [{itemCode, name, need, stock, short}, ...]}
     """
     return _post("/internal/stock/check", {"lines": lines})
+
+
+def produce(tree_code: str, qty: int, user_id: int, wo_no: str) -> dict:
+    """작업지시 1건 완료를 재고에 반영한다: 자재 차감(CONSUME) + 완성 트리 입고(PRODUCE).
+    재고 서버가 하나의 DB 트랜잭션으로 처리하므로, 부족하면 아무것도 바뀌지 않고 409 가 온다.
+
+    Args:    tree_code, qty — 만든 트리와 수량, user_id — 처리자(세션의 사용자), wo_no — 수불 이력에 남길 작업지시 번호
+    Returns: {"treeCode", "qty", "treeStock", "consumed": [{"itemCode", "qty", "stockAfter"}, ...]}
+    Raises:  ApiError(409) — 자재 부족 (details = 부족 자재 전부)
+    """
+    return _post("/internal/stock/produce", {"treeCode": tree_code, "qty": qty, "userId": user_id, "woNo": wo_no})
+
+
+def ship(user_id: int, rows: list[dict]) -> dict:
+    """출하 작업서를 재고에 반영한다: 완성 트리 차감(SHIP). 하나의 트랜잭션으로 처리한다.
+
+    Args:    user_id — 처리자, rows — [{"treeCode", "destination", "qty"}, ...]
+    Returns: {"rows": [...], "treeStock": {"T-CLASSIC": 8, ...}}
+    Raises:  ApiError(409) — 트리별 합계가 완성 트리 재고보다 많음
+    """
+    return _post("/internal/stock/ship", {"userId": user_id, "rows": rows})

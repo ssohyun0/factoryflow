@@ -6,10 +6,16 @@
 #   POST  /api/production/plans/check         (ADMIN)  새 계획 + 대기 작업지시를 합쳐 부족 자재 확인
 #   POST  /api/production/work-orders/batch   (ADMIN)  생산계획 저장 + 작업지시 일괄 등록 (같은 모델 WAIT 에 합침)
 #   PATCH /api/production/work-orders/{id}    (ADMIN)  대기 작업지시 수량 수정 (0 = 삭제)
+#   POST  /api/production/work-orders/{id}/complete (WORKER) 작업지시 완료 → 재고 서버 produce
 #
 # 흐름 (일괄 등록)
 #   세션 확인(ADMIN) → 생산계획 잠금 → WAIT 작업지시 조회 → 재고 서버 check(대기 + 새 계획)
 #   → 부족하면 409(아무것도 저장 안 함) → 계획·계획 줄 저장 → WAIT 에 합치기 / 새 작업지시 → 커밋
+#
+# 흐름 (완료) — 두 서비스의 DB 를 함께 바꾸므로 순서가 중요하다
+#   잠금·트랜잭션 시작 → 작업지시 행 잠금(FOR UPDATE) → WAIT 인지 확인 → DONE 으로 변경(아직 커밋 전)
+#   → 재고 서버 produce(자재 차감 + 트리 입고, 재고 서버 쪽 트랜잭션)
+#   → 성공하면 커밋 / 409 등 실패하면 롤백 (작업지시는 WAIT 그대로, 재고도 그대로)
 #
 # 의존 : app/db.py(MySQL), app/inventory_client.py(재고 서버), app/services/planning.py(계산)
 # ------------------------------------------------------------
@@ -17,6 +23,7 @@ from fastapi import APIRouter, Depends
 from pydantic import BaseModel, Field
 
 from app import inventory_client
+from app.config import SERVED_BY
 from app.db import planning_transaction, read_cursor
 from app.responses import ApiError, ok
 from app.services import planning
@@ -241,3 +248,40 @@ def update_qty(wo_id: int, body: QtyUpdate, user: SessionUser = Depends(require_
         cur.execute("UPDATE work_orders SET qty = %s WHERE id = %s", (body.qty, wo_id))
 
     return ok({"id": wo_id, "woNo": row["wo_no"], "qty": body.qty, "deleted": False})
+
+
+@router.post("/work-orders/{wo_id}/complete")
+def complete(wo_id: int, user: SessionUser = Depends(require_role("WORKER"))):
+    """작업지시 완료 (루돌프의 [완료] 버튼).
+
+    재고 서버가 BOM 만큼 자재를 차감하고 완성 트리를 입고한다.
+    작업지시에는 처리자와 "처리한 생산 서버 hostname"을 남긴다 (어느 복제본이 처리했는지 화면에 표시).
+    Returns: { order: {...}, consumed: [...], treeStock }
+    Raises:  404 — 없는 작업지시
+             409 ALREADY_DONE — 이미 완료됨 (재고 서버를 부르지 않으므로 재고 그대로)
+             409 INSUFFICIENT_STOCK — 자재 부족 (재고 서버가 롤백, 작업지시도 WAIT 그대로)
+    """
+    # 계획 등록·수량 수정과 같은 잠금을 쓴다: 완료 중에 같은 작업지시의 수량이 바뀌거나,
+    # 두 서버가 같은 작업지시를 동시에 완료(이중 차감)하는 일을 막는다
+    with planning_transaction() as cur:
+        cur.execute(f"SELECT {WORK_ORDER_COLUMNS} FROM work_orders WHERE id = %s FOR UPDATE", (wo_id,))
+        row = cur.fetchone()
+        if row is None:
+            raise ApiError(404, "NOT_FOUND", "작업지시를 찾을 수 없습니다.")
+        if row["status"] != "WAIT":
+            raise ApiError(409, "ALREADY_DONE", f"{row['wo_no']}은(는) 이미 완료된 작업지시입니다.")
+
+        # 1) 먼저 내 DB 를 바꿔 둔다 (커밋 전). 재고 서버 호출이 실패하면 블록을 빠져나가며 롤백된다
+        cur.execute(
+            "UPDATE work_orders SET status = 'DONE', completed_by = %s, completed_by_name = %s, "
+            "completed_server = %s, completed_at = NOW() WHERE id = %s",
+            (user.user_id, user.username, SERVED_BY, wo_id),
+        )
+        # 2) 재고 서버: 자재 차감 + 트리 입고 (한 트랜잭션). 부족하면 409 가 그대로 올라간다
+        stock = inventory_client.produce(row["tree_code"], int(row["qty"]), user.user_id, row["wo_no"])
+
+        cur.execute(f"SELECT {WORK_ORDER_COLUMNS} FROM work_orders WHERE id = %s", (wo_id,))
+        order = _to_api(cur.fetchone())
+    # 3) 블록을 정상으로 빠져나오면 커밋된다
+
+    return ok({"order": order, "consumed": stock["consumed"], "treeStock": stock["treeStock"]})
